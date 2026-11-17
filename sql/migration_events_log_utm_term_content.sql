@@ -1,0 +1,2 @@
+ALTER TABLE events_log ADD COLUMN IF NOT EXISTS utm_term TEXT;
+ALTER TABLE events_log ADD COLUMN IF NOT EXISTS utm_content TEXT;
