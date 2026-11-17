@@ -196,13 +196,16 @@ export async function POST(request: NextRequest) {
     // ── CAPI + GA4 em paralelo ──
     const platform = parsePlatform(lead?.platform) || detectPlatform({ utm_source: finalUtms.utm_source });
     // Compra de uma plataforma não vai pro pixel da outra (ver sendsTo)
+    // DIGISTORE_ONLY_MATCHED=1: venda sem lead deste dash é de outro funil
+    // (mesmo produto Digistore em dois dashes) — registra, mas não envia
+    const notOurs = !matchedLead && (await getSetting("DIGISTORE_ONLY_MATCHED")) === "1";
     const skipped = () => ({
-      response: { error: `skipped: compra de origem ${platform}` },
+      response: { error: notOurs ? "skipped: compra sem lead deste dash" : `skipped: compra de origem ${platform}` },
       sentPayload: {},
     });
 
     const [capiResult, ga4Result, tiktokResult] = await Promise.all([
-      !sendsTo("meta", platform) ? skipped() : sendMetaCAPI({
+      notOurs || !sendsTo("meta", platform) ? skipped() : sendMetaCAPI({
         eventName: "Purchase",
         eventId: metaEventId,
         pixelId: leadPixelId,
@@ -244,7 +247,7 @@ export async function POST(request: NextRequest) {
           }] : undefined,
         },
       }),
-      !sendsTo("tiktok", platform) ? skipped() : sendTikTokEvent({
+      notOurs || !sendsTo("tiktok", platform) ? skipped() : sendTikTokEvent({
         eventName: "Purchase",
         eventId: metaEventId,
         userData: {

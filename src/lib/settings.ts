@@ -12,6 +12,9 @@ export const SETTING_KEYS = [
   "DIGISTORE_IPN_PASSPHRASE",
   "DIGISTORE_POSTBACK_SECRET",
   "DIGISTORE_ACCEPT_TEST",
+  // "1" = Purchase só vai pros pixels se a venda bater com um lead deste dash
+  // (vários dashes recebendo IPN do mesmo produto Digistore)
+  "DIGISTORE_ONLY_MATCHED",
   "COOKIE_DOMAIN",
   "TIKTOK_PIXEL_ID",
   "TIKTOK_ACCESS_TOKEN",
