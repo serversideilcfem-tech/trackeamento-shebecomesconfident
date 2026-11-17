@@ -51,6 +51,7 @@ const GROUPS: { title: string; description: string; fields: { key: string; label
       { key: "DIGISTORE_IPN_PASSPHRASE", label: "IPN Passphrase (SHA-512)" },
       { key: "DIGISTORE_POSTBACK_SECRET", label: "Postback Secret (S2S)" },
       { key: "DIGISTORE_ACCEPT_TEST", label: "Aceitar pagamentos de teste (1 = sim)", placeholder: "vazio = não" },
+      { key: "DIGISTORE_ONLY_MATCHED", label: "Só enviar compra aos pixels se o lead for deste dash (1 = sim — use quando outro dash recebe IPN do mesmo produto)", placeholder: "vazio = não" },
     ],
   },
 ];
