@@ -373,14 +373,6 @@
     } catch (e) {}
   }
 
-  // Se a oferta estiver dentro de iframe (cloaker), o checkout tem que abrir
-  // na janela de cima — senão o Digistore carrega dentro do iframe.
-  function navigateTop(url) {
-    if (window.top === window) { window.location.href = url; return; }
-    try { window.top.location.href = url; }
-    catch (e) { window.open(url, '_top'); }
-  }
-
   // ── Interceptor de cliques em links do Digistore24 ────────────────────────
   function attachDigistoreInterceptors(userId, pixelId, utms) {
     var fbclid = utms.fbclid;
@@ -402,48 +394,60 @@
       icSentAt = Date.now();
       try { sessionStorage.setItem(IC_KEY, String(icSentAt)); } catch (e) {}
     }
+    // Não segura o clique: sem preventDefault/stopPropagation. O link é
+    // decorado (cid/UTMs) no próprio clique, antes da ação padrão do browser,
+    // e a navegação segue nativa — o player (ex: VTurb) conta o clique dele e
+    // abre o checkout normalmente. Eventos saem em paralelo (fetch keepalive
+    // sobrevive à navegação; o pixel client-side é best effort, o server-side
+    // com o mesmo event_id garante o evento).
+    function findCheckoutLink(e) {
+      var path = (e.composedPath && e.composedPath()) || [];
+      for (var i = 0; i < path.length; i++) {
+        var n = path[i];
+        if (n && n.tagName === 'A' && n.getAttribute && DIGISTORE_RE.test(n.getAttribute('href') || '')) return n;
+      }
+      var el = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      return el && DIGISTORE_RE.test(el.getAttribute('href') || '') ? el : null;
+    }
     document.addEventListener('click', function (e) {
-      var el = e.target.closest('a[href]');
+      var el;
+      try { el = findCheckoutLink(e); } catch (err) { return; }
       if (!el) return;
-      var href = el.getAttribute('href') || '';
-      if (!DIGISTORE_RE.test(href)) return;
 
-      e.preventDefault();
+      try {
+        var decorated = decorateDigistoreUrl(el.href, userId, utms);
+        if (decorated && decorated !== el.href) el.setAttribute('href', decorated);
+        // Oferta dentro de iframe (cloaker): checkout abre na janela de cima
+        if (window.top !== window && !el.getAttribute('target')) el.setAttribute('target', '_top');
+      } catch (err) {}
 
       if (checkoutLock) return;
       checkoutLock = true;
       setTimeout(function () { checkoutLock = false; }, 3000);
 
-      var eventId = uuid4();
-      var decoratedUrl = decorateDigistoreUrl(href, userId, utms);
-
-      if (checkoutTracked()) { navigateTop(decoratedUrl); return; }
+      if (checkoutTracked()) return;
       markCheckoutTracked();
 
-      // Meta Pixel client-side (dedup com CAPI via eventID)
-      if (window.fbq && PIXEL_ID) fbq('track', 'InitiateCheckout', {}, { eventID: eventId });
-      // TikTok Pixel client-side (dedup com Events API via event_id)
-      if (window.ttq && TIKTOK_ID) window.ttq.track('InitiateCheckout', {}, { event_id: eventId });
-
-      // GA4 gtag client-side begin_checkout (gtag anexa session_id nativamente)
-      if (window.gtag) {
-        window.gtag('event', 'begin_checkout', {
-          event_id: eventId,
-          source:   utms.utm_source   || undefined,
-          medium:   utms.utm_medium   || undefined,
-          campaign: utms.utm_campaign || undefined,
-          content:  utms.utm_content  || undefined,
-          term:     utms.utm_term     || undefined,
-        });
-      }
-
-      // Não espera resposta: fetch com keepalive sobrevive à navegação.
-      // Esperar /api/lead (preflight + escrita) segurava o clique até 600ms.
-      postLead(userId, pixelId, utms, fbclid);
-      postEvent('InitiateCheckout', userId, pixelId, utms, fbclid, eventId);
-
-      // Folga curta só pros pixels client-side (fbq/ttq) saírem antes do unload
-      setTimeout(function () { navigateTop(decoratedUrl); }, 150);
+      try {
+        var eventId = uuid4();
+        // Meta Pixel client-side (dedup com CAPI via eventID)
+        if (window.fbq && PIXEL_ID) fbq('track', 'InitiateCheckout', {}, { eventID: eventId });
+        // TikTok Pixel client-side (dedup com Events API via event_id)
+        if (window.ttq && TIKTOK_ID) window.ttq.track('InitiateCheckout', {}, { event_id: eventId });
+        // GA4 gtag client-side begin_checkout (gtag anexa session_id nativamente)
+        if (window.gtag) {
+          window.gtag('event', 'begin_checkout', {
+            event_id: eventId,
+            source:   utms.utm_source   || undefined,
+            medium:   utms.utm_medium   || undefined,
+            campaign: utms.utm_campaign || undefined,
+            content:  utms.utm_content  || undefined,
+            term:     utms.utm_term     || undefined,
+          });
+        }
+        postLead(userId, pixelId, utms, fbclid);
+        postEvent('InitiateCheckout', userId, pixelId, utms, fbclid, eventId);
+      } catch (err) {}
     }, true);
   }
 
